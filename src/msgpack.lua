@@ -2,37 +2,13 @@
 --!strict
 local msgpack = {}
 
-local band = bit32.band
-local bor = bit32.bor
-local bufferCreate = buffer.create
-local bufferLen = buffer.len
-local bufferCopy = buffer.copy
-local readstring = buffer.readstring
-local writestring = buffer.writestring
-local readu8 = buffer.readu8
-local readi8 = buffer.readi8
-local writeu8 = buffer.writeu8
-local writei8 = buffer.writei8
-local lshift = bit32.lshift
-local extract = bit32.extract
-local ldexp = math.ldexp
-local frexp = math.frexp
-local floor = math.floor
-local modf = math.modf
-local sign = math.sign
-local ssub = string.sub
-local char = string.char
-local sbyte = string.byte
-local concat = table.concat
-local tableCreate = table.create
-
 -- MsgPack numbers are big-endian, buffer methods are little-endian
 -- Will need to reverse 16 and 32 bit ints, floats and doubles
 local function reverse(b: buffer, offset: number, count: number): ()
   for i=1,count//2 do
-    local byte = readu8(b, offset + i - 1)
-    bufferCopy(b, offset + i - 1, b, offset + count - i, 1)
-    writeu8(b, offset + count - i, byte)
+    local byte = buffer.readu8(b, offset + i - 1)
+    buffer.copy(b, offset + i - 1, b, offset + count - i, 1)
+    buffer.writeu8(b, offset + count - i, byte)
   end
 end
 
@@ -97,7 +73,7 @@ local function readf64(b: buffer, offset: number): number
 end
 
 local function parse(message: buffer, offset: number): (any, number)
-  local byte = readu8(message, offset)
+  local byte = buffer.readu8(message, offset)
 
   if byte == 0xC0 then     -- nil
     return nil, offset + 1
@@ -109,49 +85,49 @@ local function parse(message: buffer, offset: number): (any, number)
     return true, offset + 1
 
   elseif byte == 0xC4 then -- bin 8
-    local length = readu8(message, offset + 1)
-    local newBuf = bufferCreate(length)
-    bufferCopy(newBuf, 0, message, offset + 2, length)
+    local length = buffer.readu8(message, offset + 1)
+    local newBuf = buffer.create(length)
+    buffer.copy(newBuf, 0, message, offset + 2, length)
     return newBuf, offset + 2 + length
 
   elseif byte == 0xC5 then -- bin 16
     local length = readu16(message, offset + 1)
-    local newBuf = bufferCreate(length)
-    bufferCopy(newBuf, 0, message, offset + 3, length)
+    local newBuf = buffer.create(length)
+    buffer.copy(newBuf, 0, message, offset + 3, length)
     return newBuf, offset + 3 + length
 
   elseif byte == 0xC6 then -- bin 32
     local length = readu32(message, offset + 1)
-    local newBuf = bufferCreate(length)
-    bufferCopy(newBuf, 0, message, offset + 5, length)
+    local newBuf = buffer.create(length)
+    buffer.copy(newBuf, 0, message, offset + 5, length)
     return newBuf, offset + 5 + length
 
   elseif byte == 0xC7 then -- ext 8
-    local length = readu8(message, offset + 1)
-    local newBuf = bufferCreate(length)
-    bufferCopy(newBuf, 0, message, offset + 3, length)
+    local length = buffer.readu8(message, offset + 1)
+    local newBuf = buffer.create(length)
+    buffer.copy(newBuf, 0, message, offset + 3, length)
     return msgpack.Extension.new(
-             readu8(message, offset + 2),
+             buffer.readu8(message, offset + 2),
              newBuf
            ),
            offset + 3 + length
 
   elseif byte == 0xC8 then -- ext 16
     local length = readu16(message, offset + 1)
-    local newBuf = bufferCreate(length)
-    bufferCopy(newBuf, 0, message, offset + 4, length)
+    local newBuf = buffer.create(length)
+    buffer.copy(newBuf, 0, message, offset + 4, length)
     return msgpack.Extension.new(
-             readu8(message, offset + 3),
+             buffer.readu8(message, offset + 3),
              newBuf
            ),
            offset + 4 + length
 
   elseif byte == 0xC9 then -- ext 32
     local length = readu32(message, offset + 1)
-    local newBuf = bufferCreate(length)
-    bufferCopy(newBuf, 0, message, offset + 6, length)
+    local newBuf = buffer.create(length)
+    buffer.copy(newBuf, 0, message, offset + 6, length)
     return msgpack.Extension.new(
-             readu8(message, offset + 5),
+             buffer.readu8(message, offset + 5),
              newBuf
            ),
            offset + 6 + length
@@ -165,7 +141,7 @@ local function parse(message: buffer, offset: number): (any, number)
            offset + 9
 
   elseif byte == 0xCC then -- uint 8
-    return readu8(message, offset + 1),
+    return buffer.readu8(message, offset + 1),
            offset + 2
 
   elseif byte == 0xCD then -- uint 16
@@ -184,7 +160,7 @@ local function parse(message: buffer, offset: number): (any, number)
            offset + 9
 
   elseif byte == 0xD0 then -- int 8
-    return readi8(message, offset + 1), offset + 2
+    return buffer.readi8(message, offset + 1), offset + 2
 
   elseif byte == 0xD1 then -- int 16
     return readi16(message, offset + 1), offset + 3
@@ -200,68 +176,68 @@ local function parse(message: buffer, offset: number): (any, number)
            offset + 9
 
   elseif byte == 0xD4 then -- fixext 1
-    local newBuf = bufferCreate(1)
-    bufferCopy(newBuf, 0, message, offset + 2, 1)
+    local newBuf = buffer.create(1)
+    buffer.copy(newBuf, 0, message, offset + 2, 1)
     return msgpack.Extension.new(
-             readu8(message, offset + 1),
+             buffer.readu8(message, offset + 1),
              newBuf
            ),
            offset + 3
 
   elseif byte == 0xD5 then -- fixext 2
-    local newBuf = bufferCreate(2)
-    bufferCopy(newBuf, 0, message, offset + 2, 2)
+    local newBuf = buffer.create(2)
+    buffer.copy(newBuf, 0, message, offset + 2, 2)
     return msgpack.Extension.new(
-             readu8(message, offset + 1),
+             buffer.readu8(message, offset + 1),
              newBuf
            ),
            offset + 4
 
   elseif byte == 0xD6 then -- fixext 4
-    local newBuf = bufferCreate(4)
-    bufferCopy(newBuf, 0, message, offset + 2, 4)
+    local newBuf = buffer.create(4)
+    buffer.copy(newBuf, 0, message, offset + 2, 4)
     return msgpack.Extension.new(
-             readu8(message, offset + 1),
+             buffer.readu8(message, offset + 1),
              newBuf
            ),
            offset + 6
 
   elseif byte == 0xD7 then -- fixext 8
-    local newBuf = bufferCreate(8)
-    bufferCopy(newBuf, 0, message, offset + 2, 8)
+    local newBuf = buffer.create(8)
+    buffer.copy(newBuf, 0, message, offset + 2, 8)
     return msgpack.Extension.new(
-             readu8(message, offset + 1),
+             buffer.readu8(message, offset + 1),
              newBuf
            ),
            offset + 10
 
   elseif byte == 0xD8 then -- fixext 16
-    local newBuf = bufferCreate(16)
-    bufferCopy(newBuf, 0, message, offset + 2, 16)
+    local newBuf = buffer.create(16)
+    buffer.copy(newBuf, 0, message, offset + 2, 16)
     return msgpack.Extension.new(
-             readu8(message, offset + 1),
+             buffer.readu8(message, offset + 1),
              newBuf
            ),
            offset + 18
 
   elseif byte == 0xD9 then -- str 8
-    local length = readu8(message, offset + 1)
-    return readstring(message, offset + 2, length),
+    local length = buffer.readu8(message, offset + 1)
+    return buffer.readstring(message, offset + 2, length),
            offset + 2 + length
 
   elseif byte == 0xDA then -- str 16
     local length = readu16(message, offset + 1)
-    return readstring(message, offset + 3, length),
+    return buffer.readstring(message, offset + 3, length),
            offset + 3 + length
 
   elseif byte == 0xDB then -- str 32
     local length = readu32(message, offset + 1)
-    return readstring(message, offset + 5, length),
+    return buffer.readstring(message, offset + 5, length),
            offset + 5 + length
 
   elseif byte == 0xDC then -- array 16
     local length = readu16(message, offset + 1)
-    local array = tableCreate(length)
+    local array = table.create(length)
     local newOffset = offset + 3
 
     for i=1,length do
@@ -272,7 +248,7 @@ local function parse(message: buffer, offset: number): (any, number)
 
   elseif byte == 0xDD then -- array 32
     local length = readu32(message, offset + 1)
-    local array = tableCreate(length)
+    local array = table.create(length)
     local newOffset = offset + 5
 
     for i=1,length do
@@ -314,7 +290,7 @@ local function parse(message: buffer, offset: number): (any, number)
     return byte, offset + 1
 
   elseif byte - 0x80 <= 0x8F - 0x80 then -- fixmap
-    local length = band(byte, 0xF)
+    local length = bit32.band(byte, 0xF)
     local dictionary = {}
     local newOffset = offset + 1
     local key
@@ -327,8 +303,8 @@ local function parse(message: buffer, offset: number): (any, number)
     return dictionary, newOffset
 
   elseif byte - 0x90 <= 0x9F - 0x90 then -- fixarray
-    local length = band(byte, 0xF)
-    local array = tableCreate(length)
+    local length = bit32.band(byte, 0xF)
+    local array = table.create(length)
     local newOffset = offset + 1
 
     for i=1,length do
@@ -339,7 +315,7 @@ local function parse(message: buffer, offset: number): (any, number)
 
   elseif byte - 0xA0 <= 0xBF - 0xA0 then -- fixstr
     local length = byte - 0xA0
-    return readstring(message, offset + 1, length),
+    return buffer.readstring(message, offset + 1, length),
            offset + 1 + length
 
   end
@@ -369,7 +345,7 @@ local function computeLength(data: any, tableSet: {[any]: boolean}): number
     error("Could not encode - too long string")
 
   elseif dtype == "buffer" then
-    local length = bufferLen(data)
+    local length = buffer.len(data)
 
     if length <= 0xFF then
       return 2 + length
@@ -393,8 +369,8 @@ local function computeLength(data: any, tableSet: {[any]: boolean}): number
       return 5
     end
 
-    local integral, fractional = modf(data)
-    local sign = sign(data)
+    local integral, fractional = math.modf(data)
+    local sign = math.sign(data)
 
     if fractional ~= 0 or integral > 0xFFFFFFFF or integral < -0x80000000 then
       -- float 64
@@ -432,7 +408,7 @@ local function computeLength(data: any, tableSet: {[any]: boolean}): number
       if msgpackType == msgpack.Int64 or msgpackType == msgpack.UInt64 then
         return 9
       elseif msgpackType == msgpack.Extension then
-        local length = bufferLen(data.data)
+        local length = buffer.len(data.data)
 
         if length == 1 then
           return 3
@@ -518,57 +494,57 @@ local function encode(result: buffer, offset: number, data: any): number
 
   local dtype = type(data)
   if data == nil then
-    writestring(result, offset, "\xC0")
+    buffer.writestring(result, offset, "\xC0")
     return offset + 1
   elseif data == false then
-    writestring(result, offset, "\xC2")
+    buffer.writestring(result, offset, "\xC2")
     return offset + 1
   elseif data == true then
-    writestring(result, offset, "\xC3")
+    buffer.writestring(result, offset, "\xC3")
     return offset + 1
   elseif dtype == "string" then
     local length = #data
 
     if length <= 31 then
-      writeu8(result, offset, bor(0xA0, length))
-      writestring(result, offset + 1, data)
+      buffer.writeu8(result, offset, bit32.bor(0xA0, length))
+      buffer.writestring(result, offset + 1, data)
       return offset + 1 + length
     elseif length <= 0xFF then
-      writeu8(result, offset, 0xD9)
-      writeu8(result, offset + 1, length)
-      writestring(result, offset + 2, data)
+      buffer.writeu8(result, offset, 0xD9)
+      buffer.writeu8(result, offset + 1, length)
+      buffer.writestring(result, offset + 2, data)
       return offset + 2 + length
     elseif length <= 0xFFFF then
-      writeu8(result, offset, 0xDA)
+      buffer.writeu8(result, offset, 0xDA)
       writeu16(result, offset + 1, length)
-      writestring(result, offset + 3, data)
+      buffer.writestring(result, offset + 3, data)
       return offset + 3 + length
     elseif length <= 0xFFFFFFFF then
-      writeu8(result, offset, 0xDB)
+      buffer.writeu8(result, offset, 0xDB)
       writeu32(result, offset + 1, length)
-      writestring(result, offset + 5, data)
+      buffer.writestring(result, offset + 5, data)
       return offset + 5 + length
     end
 
     error("Could not encode - too long string")
 
   elseif dtype == "buffer" then
-    local length = bufferLen(data)
+    local length = buffer.len(data)
 
     if length <= 0xFF then
-      writeu8(result, offset, 0xC4)
-      writeu8(result, offset + 1, length)
-      bufferCopy(result, offset + 2, data)
+      buffer.writeu8(result, offset, 0xC4)
+      buffer.writeu8(result, offset + 1, length)
+      buffer.copy(result, offset + 2, data)
       return offset + 2 + length
     elseif length <= 0xFFFF then
-      writeu8(result, offset, 0xC5)
+      buffer.writeu8(result, offset, 0xC5)
       writeu16(result, offset + 1, length)
-      bufferCopy(result, offset + 3, data)
+      buffer.copy(result, offset + 3, data)
       return offset + 3 + length
     elseif length <= 0xFFFFFFFF then
-      writeu8(result, offset, 0xC6)
+      buffer.writeu8(result, offset, 0xC6)
       writeu32(result, offset + 1, length)
-      bufferCopy(result, offset + 5, data)
+      buffer.copy(result, offset + 5, data)
       return offset + 5 + length
     end
 
@@ -577,60 +553,60 @@ local function encode(result: buffer, offset: number, data: any): number
   elseif dtype == "number" then
     -- represents NaN, Inf, -Inf as float 32 to save space
     if data == 0 then
-      writeu8(result, offset, 0)
+      buffer.writeu8(result, offset, 0)
       return offset + 1
     elseif data ~= data then -- NaN
-      writestring(result, offset, "\xCA\x7F\x80\x00\x01")
+      buffer.writestring(result, offset, "\xCA\x7F\x80\x00\x01")
       return offset + 5
     elseif data == math.huge then
-      writestring(result, offset, "\xCA\x7F\x80\x00\x00")
+      buffer.writestring(result, offset, "\xCA\x7F\x80\x00\x00")
       return offset + 5
     elseif data == -math.huge then
-      writestring(result, offset, "\xCA\xFF\x80\x00\x00")
+      buffer. writestring(result, offset, "\xCA\xFF\x80\x00\x00")
       return offset + 5
     end
 
-    local integral, fractional = modf(data)
-    local sign = sign(data)
+    local integral, fractional = math.modf(data)
+    local sign = math.sign(data)
 
     if fractional ~= 0 or integral > 0xFFFFFFFF or integral < -0x80000000 then
       -- float 64
-      writeu8(result, offset, 0xCB)
+      buffer.writeu8(result, offset, 0xCB)
       writef64(result, offset + 1, data)
       return offset + 9
     end
 
     if sign > 0 then
       if integral <= 127 then -- positive fixint
-        writeu8(result, offset, integral)
+        buffer.writeu8(result, offset, integral)
         return offset + 1
       elseif integral <= 0xFF then -- uint 8
-        writeu8(result, offset, 0xCC)
-        writeu8(result, offset + 1, integral)
+        buffer.writeu8(result, offset, 0xCC)
+        buffer.writeu8(result, offset + 1, integral)
         return offset + 2
       elseif integral <= 0xFFFF then -- uint 16
-        writeu8(result, offset, 0xCD)
+        buffer.writeu8(result, offset, 0xCD)
         writeu16(result, offset + 1, integral)
         return offset + 3
       elseif integral <= 0xFFFFFFFF then -- uint 32
-        writeu8(result, offset, 0xCE)
+        buffer.writeu8(result, offset, 0xCE)
         writeu32(result, offset + 1, integral)
         return offset + 5
       end
     else
       if integral >= -0x20 then -- negative fixint
-        writeu8(result, offset, bor(0xE0, extract(integral, 0, 5)))
+        buffer.writeu8(result, offset, bit32.bor(0xE0, bit32.extract(integral, 0, 5)))
         return offset + 1
       elseif integral >= -0x80 then -- int 8
-        writeu8(result, offset, 0xD0)
-        writei8(result, offset + 1, integral)
+        buffer.writeu8(result, offset, 0xD0)
+        buffer.writei8(result, offset + 1, integral)
         return offset + 2
       elseif integral >= -0x8000 then -- int 16
-        writeu8(result, offset, 0xD1)
+        buffer.writeu8(result, offset, 0xD1)
         writei16(result, offset + 1, integral)
         return offset + 3
       elseif integral >= -0x80000000 then -- int 32
-        writeu8(result, offset, 0xD2)
+        buffer.writeu8(result, offset, 0xD2)
         writei32(result, offset + 1, integral)
         return offset + 5
       end
@@ -644,38 +620,38 @@ local function encode(result: buffer, offset: number, data: any): number
     if msgpackType then
       if msgpackType == msgpack.Int64 or msgpackType == msgpack.UInt64 then
         local intType = if msgpackType == msgpack.UInt64 then 0xCF else 0xD3
-        writeu8(result, offset, intType)
+        buffer.writeu8(result, offset, intType)
         writeu32(result, offset + 1, data.mostSignificantPart)
         writeu32(result, offset + 5, data.leastSignificantPart)
         return offset + 9
       elseif msgpackType == msgpack.Extension then
-        local length = bufferLen(data.data)
+        local length = buffer.len(data.data)
         local extType = extensionTypeLUT[length]
 
         if extType then
-          writeu8(result, offset, extType)
-          writeu8(result, offset + 1, data.type)
-          bufferCopy(result, offset + 2, data.data)
+          buffer.writeu8(result, offset, extType)
+          buffer.writeu8(result, offset + 1, data.type)
+          buffer.copy(result, offset + 2, data.data)
           return offset + 2 + length
         end
 
         if length <= 0xFF then
-          writeu8(result, offset, 0xC7)
-          writeu8(result, offset + 1, length)
-          writeu8(result, offset + 2, data.type)
-          bufferCopy(result, offset + 3, data.data)
+          buffer.writeu8(result, offset, 0xC7)
+          buffer.writeu8(result, offset + 1, length)
+          buffer.writeu8(result, offset + 2, data.type)
+          buffer.copy(result, offset + 3, data.data)
           return offset + 3 + length
         elseif length <= 0xFFFF then
-          writeu8(result, offset, 0xC8)
+          buffer.writeu8(result, offset, 0xC8)
           writeu16(result, offset + 1, length)
-          writeu8(result, offset + 3, data.type)
-          bufferCopy(result, offset + 4, data.data)
+          buffer.writeu8(result, offset + 3, data.type)
+          buffer.copy(result, offset + 4, data.data)
           return offset + 4 + length
         elseif length <= 0xFFFFFFFF then
-          writeu8(result, offset, 0xC9)
+          buffer.writeu8(result, offset, 0xC9)
           writeu32(result, offset + 1, length)
-          writeu8(result, offset + 5, data.type)
-          bufferCopy(result, offset + 6, data.data)
+          buffer.writeu8(result, offset + 5, data.type)
+          buffer.copy(result, offset + 6, data.data)
           return offset + 6 + length
         end
 
@@ -693,14 +669,14 @@ local function encode(result: buffer, offset: number, data: any): number
     if length == mapLength then -- array
       local newOffset = offset
       if length <= 15 then
-        writeu8(result, offset, bor(0x90, mapLength))
+        buffer.writeu8(result, offset, bit32.bor(0x90, mapLength))
         newOffset += 1
       elseif length <= 0xFFFF then
-        writeu8(result, offset, 0xDC)
+        buffer.writeu8(result, offset, 0xDC)
         writeu16(result, offset + 1, length)
         newOffset += 3
       elseif length <= 0xFFFFFFFF then
-        writeu8(result, offset, 0xDD)
+        buffer.writeu8(result, offset, 0xDD)
         writeu32(result, offset + 1, length)
         newOffset += 5
       else
@@ -716,14 +692,14 @@ local function encode(result: buffer, offset: number, data: any): number
     else -- map
       local newOffset = offset
       if mapLength <= 15 then
-        writeu8(result, offset, bor(0x80, mapLength))
+        buffer.writeu8(result, offset, bit32.bor(0x80, mapLength))
         newOffset += 1
       elseif mapLength <= 0xFFFF then
-        writeu8(result, offset, 0xDE)
+        buffer.writeu8(result, offset, 0xDE)
         writeu16(result, offset + 1, mapLength)
         newOffset += 3
       elseif mapLength <= 0xFFFFFFFF then
-        writeu8(result, offset, 0xDF)
+        buffer.writeu8(result, offset, 0xDF)
         writeu32(result, offset + 1, mapLength)
         newOffset += 5
       else
@@ -775,23 +751,23 @@ end
 function msgpack.utf8Encode(message: string): string
   local messageLength = #message
   local nBytes = math.ceil(messageLength * (8 / 7))
-  local result = bufferCreate(nBytes)
+  local result = buffer.create(nBytes)
 
   local bitPointer = 0
   for i=1,nBytes do
-    local j = 1 + floor(bitPointer / 8)
+    local j = 1 + math.floor(bitPointer / 8)
     local bitRemainder = bitPointer % 8
-    local byte = sbyte(message, j)
+    local byte = string.byte(message, j)
 
     if bitRemainder == 0 then
-      writeu8(result, i-1, extract(byte, 1, 7))
+      buffer.writeu8(result, i-1, bit32.extract(byte, 1, 7))
     elseif bitRemainder == 1 then
-      writeu8(result, i-1, extract(byte, 0, 7))
+      buffer.writeu8(result, i-1, bit32.extract(byte, 0, 7))
     else
-      local nextByte = sbyte(message, j+1) or 0
-      writeu8(result, i-1, bor(
-        lshift(extract(byte, 0, 8 - bitRemainder), bitRemainder - 1),
-        extract(nextByte, 9 - bitRemainder, bitRemainder - 1)
+      local nextByte = string.byte(message, j+1) or 0
+      buffer.writeu8(result, i-1, bit32.bor(
+        bit32.lshift(bit32.extract(byte, 0, 8 - bitRemainder), bitRemainder - 1),
+        bit32.extract(nextByte, 9 - bitRemainder, bitRemainder - 1)
       ))
     end
 
@@ -802,18 +778,18 @@ function msgpack.utf8Encode(message: string): string
 end
 
 function msgpack.utf8Decode(message: string): string
-  local nBytes = floor(#message *  7 / 8)
-  local result = bufferCreate(nBytes)
+  local nBytes = math.floor(#message *  7 / 8)
+  local result = buffer.create(nBytes)
 
   local bitPointer = 0
   for i=1,nBytes do
     local bitRemainder = bitPointer % 7
-    local byte = sbyte(message, 1 + floor(bitPointer / 7))
-    local nextByte = sbyte(message, 2 + floor(bitPointer / 7))
+    local byte = string.byte(message, 1 + math.floor(bitPointer / 7))
+    local nextByte = string.byte(message, 2 + math.floor(bitPointer / 7))
 
-    writeu8(result, i-1, bor(
-      lshift(extract(byte, 0, 7 - bitRemainder), bitRemainder + 1),
-      extract(nextByte, 6 - bitRemainder, 1 + bitRemainder)
+    buffer.writeu8(result, i-1, bit32.bor(
+      bit32.lshift(bit32.extract(byte, 0, 7 - bitRemainder), bitRemainder + 1),
+      bit32.extract(nextByte, 6 - bitRemainder, 1 + bitRemainder)
     ))
 
     bitPointer += 8
@@ -832,7 +808,7 @@ end
 
 function msgpack.encode(data: any): string
   local length = computeLength(data, {})
-  local result = bufferCreate(length)
+  local result = buffer.create(length)
   encode(result, 0, data)
   return buffer.tostring(result)
 end
