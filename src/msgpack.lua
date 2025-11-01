@@ -347,7 +347,7 @@ local function parse(message: buffer, offset: number): (any, number)
   error("Not all decoder cases are handled, report as bug to msgpack-luau maintainer")
 end
 
-local function computeLength(data: any, tableSet: {[any]: boolean}): number
+local function computeLength(data: any, tableSet: {[any]: number}): number
   local dtype = type(data)
   if data == nil then
     return 1
@@ -456,17 +456,19 @@ local function computeLength(data: any, tableSet: {[any]: boolean}): number
       end
     end
 
-    if tableSet[data] then
-      error("Can not serialize cyclic table")
-    else
-      tableSet[data] = true
-    end
-
     local length = #data
     local mapLength = 0
 
     for _,_ in pairs(data) do
       mapLength += 1
+    end
+
+    if tableSet[data] then
+      error("Can not serialize cyclic table")
+    else
+      tableSet[data] = if mapLength == length
+        then mapLength
+        else mapLength + 2 ^ 30
     end
 
     local headerLen
@@ -514,7 +516,7 @@ local extensionTypeLUT = {
   [16] = 0xD8,
 }
 
-local function encode(result: buffer, offset: number, data: any): number
+local function encode(result: buffer, offset: number, data: any, tableSet: {[any]: number}): number
 
   local dtype = type(data)
   if data == nil then
@@ -683,32 +685,29 @@ local function encode(result: buffer, offset: number, data: any): number
       end
     end
 
-    local length = #data
-    local mapLength = 0
+    local setData = tableSet[data]
+    local isArray = setData < 2 ^ 30
+    local mapLength = if isArray then setData else setData - 2 ^ 30
 
-    for _,_ in pairs(data) do
-      mapLength += 1
-    end
-
-    if length == mapLength then -- array
+    if isArray then -- array
       local newOffset = offset
-      if length <= 15 then
+      if mapLength <= 15 then
         writeu8(result, offset, bor(0x90, mapLength))
         newOffset += 1
-      elseif length <= 0xFFFF then
+      elseif mapLength <= 0xFFFF then
         writeu8(result, offset, 0xDC)
-        writeu16(result, offset + 1, length)
+        writeu16(result, offset + 1, mapLength)
         newOffset += 3
-      elseif length <= 0xFFFFFFFF then
+      elseif mapLength <= 0xFFFFFFFF then
         writeu8(result, offset, 0xDD)
-        writeu32(result, offset + 1, length)
+        writeu32(result, offset + 1, mapLength)
         newOffset += 5
       else
         error("Could not encode - too long array")
       end
 
       for _,v in ipairs(data) do
-        newOffset = encode(result, newOffset, v)
+        newOffset = encode(result, newOffset, v, tableSet)
       end
 
       return newOffset
@@ -731,8 +730,8 @@ local function encode(result: buffer, offset: number, data: any): number
       end
 
       for k,v in pairs(data) do
-        newOffset = encode(result, newOffset, k)
-        newOffset = encode(result, newOffset, v)
+        newOffset = encode(result, newOffset, k, tableSet)
+        newOffset = encode(result, newOffset, v, tableSet)
       end
 
       return newOffset
@@ -831,9 +830,10 @@ function msgpack.decode(message: string): any
 end
 
 function msgpack.encode(data: any): string
-  local length = computeLength(data, {})
+  local tableSet = {}
+  local length = computeLength(data, tableSet)
   local result = bufferCreate(length)
-  encode(result, 0, data)
+  encode(result, 0, data, tableSet)
   return buffer.tostring(result)
 end
 
