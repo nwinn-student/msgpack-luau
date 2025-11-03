@@ -354,112 +354,16 @@ local function computeLength(data: any, tableSet: {[any]: boolean}): number
   elseif dtype == "boolean" then
     return 1
   elseif dtype == "string" then
-    local length = #data
-
-    if length <= 31 then
-      return 1 + length
-    elseif length <= 0xFF then
-      return 2 + length
-    elseif length <= 0xFFFF then
-      return 3 + length
-    elseif length <= 0xFFFFFFFF then
-      return 5 + length
-    end
-
-    error("Could not encode - too long string")
-
+    return 5 + #data
   elseif dtype == "buffer" then
-    local length = bufferLen(data)
-
-    if length <= 0xFF then
-      return 2 + length
-    elseif length <= 0xFFFF then
-      return 3 + length
-    elseif length <= 0xFFFFFFFF then
-      return 5 + length
-    end
-
-    error("Could not encode - too long binary buffer")
-
+    return 5 + bufferLen(data)
   elseif dtype == "number" then
-    -- represents NaN, Inf, -Inf as float 32 to save space
-    if data == 0 then
-      return 1
-    elseif data ~= data then -- NaN
-      return 5
-    elseif data == math.huge then
-      return 5
-    elseif data == -math.huge then
-      return 5
-    end
-
-    local integral, fractional = modf(data)
-    local sign = sign(data)
-
-    if fractional ~= 0 or integral > 0xFFFFFFFF or integral < -0x80000000 then
-      -- float 64
-      return 9
-    end
-
-    if sign > 0 then
-      if integral <= 127 then -- positive fixint
-        return 1
-      elseif integral <= 0xFF then -- uint 8
-        return 2
-      elseif integral <= 0xFFFF then -- uint 16
-        return 3
-      elseif integral <= 0xFFFFFFFF then -- uint 32
-        return 5
-      end
-    else
-      if integral >= -0x20 then -- negative fixint
-        return 1
-      elseif integral >= -0x80 then -- int 8
-        return 2
-      elseif integral >= -0x8000 then -- int 16
-        return 3
-      elseif integral >= -0x80000000 then -- int 32
-        return 5
-      end
-    end
-
-    error(string.format("Could not encode - unhandled number \"%s\"", typeof(data)))
-
+    return 9
   elseif dtype == "table" then
-    local msgpackType = data._msgpackType
-
-    if msgpackType then
-      if msgpackType == msgpack.Int64 or msgpackType == msgpack.UInt64 then
-        return 9
-      elseif msgpackType == msgpack.Extension then
-        local length = bufferLen(data.data)
-
-        if length == 1 then
-          return 3
-        elseif length == 2 then
-          return 4
-        elseif length == 4 then
-          return 6
-        elseif length == 8 then
-          return 10
-        elseif length == 16 then
-          return 18
-        elseif length <= 0xFF then
-          return 3 + length
-        elseif length <= 0xFFFF then
-          return 4 + length
-        elseif length <= 0xFFFFFFFF then
-          return 6 + length
-        end
-
-        error("Could not encode - too long extension data")
-      end
-    end
-
-    if tableSet[data] then
-      error("Can not serialize cyclic table")
-    else
+    if not tableSet[data] then
       tableSet[data] = true
+    else
+      error("Can not serialize cyclic table")
     end
 
     local length = #data
@@ -469,20 +373,7 @@ local function computeLength(data: any, tableSet: {[any]: boolean}): number
       mapLength += 1
     end
 
-    local headerLen
-    if mapLength <= 15 then
-      headerLen = 1
-    elseif mapLength <= 0xFFFF then
-      headerLen = 3
-    elseif mapLength <= 0xFFFFFFFF then
-      headerLen = 5
-    else
-      if length == mapLength then
-        error("Could not encode - too long array")
-      else
-        error("Could not encode - too long map")
-      end
-    end
+    local headerLen = 5
 
     if length == mapLength then -- array
       local contentLen = 0
@@ -833,8 +724,7 @@ end
 function msgpack.encode(data: any): string
   local length = computeLength(data, {})
   local result = bufferCreate(length)
-  encode(result, 0, data)
-  return buffer.tostring(result)
+  return readstring(result, 0, encode(result, 0, data))
 end
 
 export type Int64     = { _msgpackType: typeof(msgpack.Int64), mostSignificantPart: number, leastSignificantPart: number }
