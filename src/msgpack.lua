@@ -347,7 +347,7 @@ local function parse(message: buffer, offset: number): (any, number)
   error("Not all decoder cases are handled, report as bug to msgpack-luau maintainer")
 end
 
-local function inflate(result: buffer, minSize: number, oldSize: number)
+local function inflateInternal(result: buffer, minSize: number, oldSize: number)
   if oldSize == 0 then
     return bufferCreate(minSize), minSize
   end
@@ -359,6 +359,14 @@ local function inflate(result: buffer, minSize: number, oldSize: number)
   local temp = bufferCreate(oldSize)
   bufferCopy(temp, 0, result)
   return temp, oldSize
+end
+
+local function inflate(result: buffer, minSize: number, oldSize: number)
+  if minSize > oldSize then
+    local newResult, newSize = inflateInternal(result, minSize, oldSize)
+    return newResult, newSize
+  end
+  return result, oldSize
 end
 
 local extensionTypeLUT = {
@@ -379,23 +387,17 @@ local function encode(
 
   local dtype = type(data)
   if data == nil then
-    if offset + 1 > size then
-      result, size = inflate(result, offset + 1, size)
-    end
+    result, size = inflate(result, offset + 1, size)
 
     writestring(result, offset, "\xC0")
     return result, offset + 1, size
   elseif data == false then
-    if offset + 1 > size then
-      result, size = inflate(result, offset + 1, size)
-    end
+    result, size = inflate(result, offset + 1, size)
 
     writestring(result, offset, "\xC2")
     return result, offset + 1, size
   elseif data == true then
-    if offset + 1 > size then
-      result, size = inflate(result, offset + 1, size)
-    end
+    result, size = inflate(result, offset + 1, size)
 
     writestring(result, offset, "\xC3")
     return result, offset + 1, size
@@ -403,35 +405,27 @@ local function encode(
     local length = #data
 
     if length <= 31 then
-      if offset + 1 + length > size then
-        result, size = inflate(result, offset + 1 + length, size)
-      end
+      result, size = inflate(result, offset + 1 + length, size)
 
       writeu8(result, offset, bor(0xA0, length))
       writestring(result, offset + 1, data)
       return result, offset + 1 + length, size
     elseif length <= 0xFF then
-      if offset + 2 + length > size then
-        result, size = inflate(result, offset + 2 + length, size)
-      end
+      result, size = inflate(result, offset + 2 + length, size)
 
       writeu8(result, offset, 0xD9)
       writeu8(result, offset + 1, length)
       writestring(result, offset + 2, data)
       return result, offset + 2 + length, size
     elseif length <= 0xFFFF then
-      if offset + 3 + length > size then
-        result, size = inflate(result, offset + 3 + length, size)
-      end
+      result, size = inflate(result, offset + 3 + length, size)
 
       writeu8(result, offset, 0xDA)
       writeu16(result, offset + 1, length)
       writestring(result, offset + 3, data)
       return result, offset + 3 + length, size
     elseif length <= 0xFFFFFFFF then
-      if offset + 5 + length > size then
-        result, size = inflate(result, offset + 5 + length, size)
-      end
+      result, size = inflate(result, offset + 5 + length, size)
 
       writeu8(result, offset, 0xDB)
       writeu32(result, offset + 1, length)
@@ -445,27 +439,21 @@ local function encode(
     local length = bufferLen(data)
 
     if length <= 0xFF then
-      if offset + 2 + length > size then
-        result, size = inflate(result, offset + 2 + length, size)
-      end
+      result, size = inflate(result, offset + 2 + length, size)
 
       writeu8(result, offset, 0xC4)
       writeu8(result, offset + 1, length)
       bufferCopy(result, offset + 2, data)
       return result, offset + 2 + length, size
     elseif length <= 0xFFFF then
-      if offset + 3 + length > size then
-        result, size = inflate(result, offset + 3 + length, size)
-      end
+      result, size = inflate(result, offset + 3 + length, size)
 
       writeu8(result, offset, 0xC5)
       writeu16(result, offset + 1, length)
       bufferCopy(result, offset + 3, data)
       return result, offset + 3 + length, size
     elseif length <= 0xFFFFFFFF then
-      if offset + 5 + length > size then
-        result, size = inflate(result, offset + 5 + length, size)
-      end
+      result, size = inflate(result, offset + 5 + length, size)
 
       writeu8(result, offset, 0xC6)
       writeu32(result, offset + 1, length)
@@ -478,30 +466,22 @@ local function encode(
   elseif dtype == "number" then
     -- represents NaN, Inf, -Inf as float 32 to save space
     if data == 0 then
-      if offset + 1 > size then
-        result, size = inflate(result, offset + 1, size)
-      end
+      result, size = inflate(result, offset + 1, size)
 
       writeu8(result, offset, 0)
       return result, offset + 1, size
     elseif data ~= data then -- NaN
-      if offset + 5 > size then
-        result, size = inflate(result, offset + 5, size)
-      end
+      result, size = inflate(result, offset + 5, size)
 
       writestring(result, offset, "\xCA\x7F\x80\x00\x01")
       return result, offset + 5, size
     elseif data == math.huge then
-      if offset + 5 > size then
-        result, size = inflate(result, offset + 5, size)
-      end
+      result, size = inflate(result, offset + 5, size)
 
       writestring(result, offset, "\xCA\x7F\x80\x00\x00")
       return result, offset + 5, size
     elseif data == -math.huge then
-      if offset + 5 > size then
-        result, size = inflate(result, offset + 5, size)
-      end
+      result, size = inflate(result, offset + 5, size)
 
       writestring(result, offset, "\xCA\xFF\x80\x00\x00")
       return result, offset + 5, size
@@ -511,9 +491,7 @@ local function encode(
     local sign = sign(data)
 
     if fractional ~= 0 or integral > 0xFFFFFFFF or integral < -0x80000000 then
-      if offset + 9 > size then
-        result, size = inflate(result, offset + 9, size)
-      end
+      result, size = inflate(result, offset + 9, size)
 
       -- float 64
       writeu8(result, offset, 0xCB)
@@ -523,32 +501,24 @@ local function encode(
 
     if sign > 0 then
       if integral <= 127 then -- positive fixint
-        if offset + 1 > size then
-          result, size = inflate(result, offset + 1, size)
-        end
+        result, size = inflate(result, offset + 1, size)
 
         writeu8(result, offset, integral)
         return result, offset + 1, size
       elseif integral <= 0xFF then -- uint 8
-        if offset + 2 > size then
-          result, size = inflate(result, offset + 2, size)
-        end
+        result, size = inflate(result, offset + 2, size)
 
         writeu8(result, offset, 0xCC)
         writeu8(result, offset + 1, integral)
         return result, offset + 2, size
       elseif integral <= 0xFFFF then -- uint 16
-        if offset + 3 > size then
-          result, size = inflate(result, offset + 3, size)
-        end
+        result, size = inflate(result, offset + 3, size)
 
         writeu8(result, offset, 0xCD)
         writeu16(result, offset + 1, integral)
         return result, offset + 3, size
       elseif integral <= 0xFFFFFFFF then -- uint 32
-        if offset + 5 > size then
-          result, size = inflate(result, offset + 5, size)
-        end
+        result, size = inflate(result, offset + 5, size)
 
         writeu8(result, offset, 0xCE)
         writeu32(result, offset + 1, integral)
@@ -556,32 +526,24 @@ local function encode(
       end
     else
       if integral >= -0x20 then -- negative fixint
-        if offset + 1 > size then
-          result, size = inflate(result, offset + 1, size)
-        end
+        result, size = inflate(result, offset + 1, size)
 
         writeu8(result, offset, bor(0xE0, extract(integral, 0, 5)))
         return result, offset + 1, size
       elseif integral >= -0x80 then -- int 8
-        if offset + 2 > size then
-          result, size = inflate(result, offset + 2, size)
-        end
+        result, size = inflate(result, offset + 2, size)
 
         writeu8(result, offset, 0xD0)
         writei8(result, offset + 1, integral)
         return result, offset + 2, size
       elseif integral >= -0x8000 then -- int 16
-        if offset + 3 > size then
-          result, size = inflate(result, offset + 3, size)
-        end
+        result, size = inflate(result, offset + 3, size)
 
         writeu8(result, offset, 0xD1)
         writei16(result, offset + 1, integral)
         return result, offset + 3, size
       elseif integral >= -0x80000000 then -- int 32
-        if offset + 5 > size then
-          result, size = inflate(result, offset + 5, size)
-        end
+        result, size = inflate(result, offset + 5, size)
 
         writeu8(result, offset, 0xD2)
         writei32(result, offset + 1, integral)
@@ -596,9 +558,7 @@ local function encode(
 
     if msgpackType then
       if msgpackType == msgpack.Int64 or msgpackType == msgpack.UInt64 then
-        if offset + 9 > size then
-          result, size = inflate(result, offset + 9, size)
-        end
+        result, size = inflate(result, offset + 9, size)
 
         local intType = if msgpackType == msgpack.UInt64 then 0xCF else 0xD3
         writeu8(result, offset, intType)
@@ -610,9 +570,7 @@ local function encode(
         local extType = extensionTypeLUT[length]
 
         if extType then
-          if offset + 2 + length > size then
-            result, size = inflate(result, offset + 2 + length, size)
-          end
+          result, size = inflate(result, offset + 2 + length, size)
 
           writeu8(result, offset, extType)
           writeu8(result, offset + 1, data.type)
@@ -621,9 +579,7 @@ local function encode(
         end
 
         if length <= 0xFF then
-          if offset + 3 + length > size then
-            result, size = inflate(result, offset + 3 + length, size)
-          end
+          result, size = inflate(result, offset + 3 + length, size)
 
           writeu8(result, offset, 0xC7)
           writeu8(result, offset + 1, length)
@@ -631,9 +587,7 @@ local function encode(
           bufferCopy(result, offset + 3, data.data)
           return result, offset + 3 + length, size
         elseif length <= 0xFFFF then
-          if offset + 4 + length > size then
-            result, size = inflate(result, offset + 4 + length, size)
-          end
+          result, size = inflate(result, offset + 4 + length, size)
 
           writeu8(result, offset, 0xC8)
           writeu16(result, offset + 1, length)
@@ -641,9 +595,7 @@ local function encode(
           bufferCopy(result, offset + 4, data.data)
           return result, offset + 4 + length, size
         elseif length <= 0xFFFFFFFF then
-          if offset + 6 + length > size then
-            result, size = inflate(result, offset + 6 + length, size)
-          end
+          result, size = inflate(result, offset + 6 + length, size)
 
           writeu8(result, offset, 0xC9)
           writeu32(result, offset + 1, length)
@@ -672,24 +624,18 @@ local function encode(
     if length == mapLength then -- array
       local newOffset = offset
       if length <= 15 then
-        if offset + 1 > size then
-          result, size = inflate(result, offset + 1, size)
-        end
+        result, size = inflate(result, offset + 1, size)
 
         writeu8(result, offset, bor(0x90, mapLength))
         newOffset += 1
       elseif length <= 0xFFFF then
-        if offset + 3 > size then
-          result, size = inflate(result, offset + 3, size)
-        end
+        result, size = inflate(result, offset + 3, size)
 
         writeu8(result, offset, 0xDC)
         writeu16(result, offset + 1, length)
         newOffset += 3
       elseif length <= 0xFFFFFFFF then
-        if offset + 5 > size then
-          result, size = inflate(result, offset + 5, size)
-        end
+        result, size = inflate(result, offset + 5, size)
 
         writeu8(result, offset, 0xDD)
         writeu32(result, offset + 1, length)
@@ -707,24 +653,18 @@ local function encode(
     else -- map
       local newOffset = offset
       if mapLength <= 15 then
-        if offset + 1 > size then
-          result, size = inflate(result, offset + 1, size)
-        end
+        result, size = inflate(result, offset + 1, size)
 
         writeu8(result, offset, bor(0x80, mapLength))
         newOffset += 1
       elseif mapLength <= 0xFFFF then
-        if offset + 3 > size then
-          result, size = inflate(result, offset + 3, size)
-        end
+        result, size = inflate(result, offset + 3, size)
 
         writeu8(result, offset, 0xDE)
         writeu16(result, offset + 1, mapLength)
         newOffset += 3
       elseif mapLength <= 0xFFFFFFFF then
-        if offset + 5 > size then
-          result, size = inflate(result, offset + 5, size)
-        end
+        result, size = inflate(result, offset + 5, size)
 
         writeu8(result, offset, 0xDF)
         writeu32(result, offset + 1, mapLength)
