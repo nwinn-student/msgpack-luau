@@ -348,9 +348,6 @@ local function parse(message: buffer, offset: number): (any, number)
 end
 
 local function inflateInternal(result: buffer, minSize: number, oldSize: number)
-  if oldSize == 0 then
-    return bufferCreate(minSize), minSize
-  end
 
   while minSize > oldSize do
     oldSize *= 2
